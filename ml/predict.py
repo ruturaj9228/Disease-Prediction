@@ -4,14 +4,23 @@ import numpy as np
 import joblib
 
 def load_best_model_info(out_dir):
-    """Reads the comparison CSV and returns the best model's filename prefix and whether it supports feature importances."""
+    """Reads the comparison CSV and selects the best interpretable model."""
     comp_df = pd.read_csv(os.path.join(out_dir, 'model_comparison.csv'))
     
-    # The first row is the best one (since we sorted by Test Macro F1 descending in evaluate.py)
-    # But just in case, let's explicitly find it
-    best_row = comp_df.loc[comp_df['Test Macro F1'].idxmax()]
-    best_model_name = best_row['Model']
+    # Selection Override: Even if SVM/Naive Bayes score 1.0, we prefer Random Forest
+    # if it's within a close margin (e.g., >0.95), because it provides feature importances 
+    # natively which is required for explainability in the frontend.
     
+    # Filter for interpretable models (Random Forest, Decision Tree)
+    interpretable_models = comp_df[comp_df['Model'].isin(['Random Forest', 'Decision Tree'])]
+    
+    if not interpretable_models.empty and interpretable_models['Test Macro F1'].max() >= 0.95:
+        best_row = interpretable_models.loc[interpretable_models['Test Macro F1'].idxmax()]
+    else:
+        # Fallback if tree models perform terribly
+        best_row = comp_df.loc[comp_df['Test Macro F1'].idxmax()]
+        
+    best_model_name = best_row['Model']
     prefix = best_model_name.replace(' ', '_').lower()
     
     # Tree-based models support feature_importances_ natively in sklearn
