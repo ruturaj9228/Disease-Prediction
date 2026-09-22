@@ -23,10 +23,8 @@ def load_best_model_info(out_dir):
     best_model_name = best_row['Model']
     prefix = best_model_name.replace(' ', '_').lower()
     
-    # Tree-based models support feature_importances_ natively in sklearn
-    supports_importance = best_model_name in ['Decision Tree', 'Random Forest']
-    
-    return best_model_name, prefix, supports_importance
+    # We no longer rely on global feature importances, so we just return the name and prefix
+    return best_model_name, prefix
 
 class DiseasePredictor:
     def __init__(self):
@@ -36,11 +34,27 @@ class DiseasePredictor:
         self.label_encoder = joblib.load(os.path.join(self.out_dir, 'label_encoder.joblib'))
         self.symptoms_vocab = joblib.load(os.path.join(self.out_dir, 'symptoms_vocab.joblib'))
         
-        best_name, prefix, self.supports_importance = load_best_model_info(self.out_dir)
+        best_name, prefix = load_best_model_info(self.out_dir)
         print(f"Loaded Best Model: {best_name}")
         
         model_filename = f"model_{prefix}.joblib"
         self.model = joblib.load(os.path.join(self.out_dir, model_filename))
+        
+        # Compute symptom frequencies per disease for explainability
+        print("Computing per-class symptom frequencies for explainability...")
+        X_train = pd.read_csv(os.path.join(self.out_dir, 'X_train.csv'))
+        y_train = pd.read_csv(os.path.join(self.out_dir, 'y_train.csv'))['prognosis']
+        
+        # Group by disease class and compute mean (frequency of 1s)
+        freq_df = X_train.groupby(y_train).mean()
+        
+        # Map back to disease names
+        self.disease_symptom_freq = {}
+        for cls_idx, row in freq_df.iterrows():
+            disease_name = self.label_encoder.inverse_transform([cls_idx])[0]
+            # Create a dict of {symptom: frequency}
+            self.disease_symptom_freq[disease_name] = row.to_dict()
+        print("Frequencies computed successfully.")
         
     def get_all_symptoms(self):
         return self.symptoms_vocab
@@ -76,34 +90,37 @@ class DiseasePredictor:
         top3_classes = self.label_encoder.inverse_transform(top3_idx)
         top3_probs = probs[top3_idx]
         
-        # Feature importances (global, not local, since we use simple tree/RF)
-        # Note: Local interpretability (e.g., SHAP) is better, but global is a simple approximation
-        # for which symptoms matter most. We'll return the highest importance symptoms that the user ACTUALLY has.
-        top_symptoms_for_prediction = []
-        if self.supports_importance and hasattr(self.model, 'feature_importances_'):
-            importances = self.model.feature_importances_
-            
-            # Find which of the USER'S symptoms have the highest importance globally
-            user_symptom_indices = [self.symptoms_vocab.index(s) for s in user_symptoms if s in self.symptoms_vocab]
-            if user_symptom_indices:
-                user_importances = [(self.symptoms_vocab[i], importances[i]) for i in user_symptom_indices]
-                user_importances.sort(key=lambda x: x[1], reverse=True)
-                top_symptoms_for_prediction = [x[0] for x in user_importances[:3]]
-                
         results = []
         for cls, prob in zip(top3_classes, top3_probs):
+            # Calculate contributing symptoms FOR THIS DISEASE
+            cls_freqs = self.disease_symptom_freq.get(cls, {})
+            
+            # Filter to only the symptoms the user actually provided
+            user_symptom_freqs = []
+            for s in user_symptoms:
+                if s in cls_freqs:
+                    user_symptom_freqs.append((s, cls_freqs[s]))
+            
+            # Sort by frequency descending
+            user_symptom_freqs.sort(key=lambda x: x[1], reverse=True)
+            
+            # Top 3 (or fewer) symptoms that actually occurred for this disease in the training set
+            # We filter out symptoms that have a 0.0 frequency for this disease
+            top_symptoms = [x[0] for x in user_symptom_freqs if x[1] > 0][:3]
+            
             results.append({
                 "disease": cls,
                 "confidence": float(prob * 100),
-                "contributing_symptoms": top_symptoms_for_prediction
+                "contributing_symptoms": top_symptoms
             })
             
         return results
 
 if __name__ == "__main__":
     predictor = DiseasePredictor()
-    sample_symptoms = ["itching", "skin_rash", "nodal_skin_eruptions"]
+    sample_symptoms = ["high_fever", "cold_hands_and_feets", "throat_irritation", "headache", "pain_behind_the_eyes"]
     print(f"\nPredicting for symptoms: {sample_symptoms}")
     res = predictor.predict(sample_symptoms)
     for r in res:
-        print(f"{r['disease']}: {r['confidence']:.2f}%")
+        print(f"\nDisease: {r['disease']} ({r['confidence']:.2f}%)")
+        print(f"Contributing Symptoms: {r['contributing_symptoms']}")
