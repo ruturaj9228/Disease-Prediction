@@ -80,6 +80,24 @@ A modern, responsive React web app built with Vite, TailwindCSS, and React Query
    ```
    The application will be available at `http://localhost:5173`.
 
+## Deployment
+
+This project is prepared for easy deployment (e.g., Backend to Render, Frontend to Vercel).
+
+### Backend (Render / Heroku)
+The FastAPI backend requires the trained model artifacts (`.joblib` files) and precomputed CSVs to operate. These have explicitly been excluded from `.gitignore` so they are committed to your repository and available to the cloud provider on startup.
+
+**Environment Variables:**
+- `FRONTEND_URL`: Set this to the production URL of your frontend (e.g., `https://my-disease-app.vercel.app`). The backend will automatically add this to the CORS allowed origins.
+
+> **Note on Free Tiers:** If you deploy the backend on a free tier (like Render), the instance will spin down after 15 minutes of inactivity. The first request after it spins down will cause a "cold start," which may take 30-50 seconds to respond while the server boots up and loads the machine learning models. A `/health` endpoint is provided for service monitoring.
+
+### Frontend (Vercel / Netlify)
+The React + Vite frontend accesses the backend via an environment variable.
+
+**Environment Variables:**
+- `VITE_API_URL`: Set this to your deployed backend URL (e.g., `https://my-backend-app.onrender.com`). If not provided, it falls back to `http://127.0.0.1:8002` for local development.
+
 ---
 
 ## Limitations

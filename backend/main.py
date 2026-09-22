@@ -13,13 +13,19 @@ from ml.predict import DiseasePredictor
 app = FastAPI(title="Disease Prediction API", description="Academic project API for disease prediction based on symptoms")
 
 # Enable CORS for React frontend (Vite default port is usually 5173 or 3000)
+frontend_url = os.environ.get("FRONTEND_URL", "http://localhost:5173")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # For academic demo, allow all origins
+    allow_origins=[frontend_url, "http://localhost:5173", "http://127.0.0.1:5173"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+@app.get("/health")
+async def health_check():
+    """Health check endpoint for Render to verify service is alive."""
+    return {"status": "ok"}
 
 # Initialize predictor at startup
 print("Initializing ML predictor...")
