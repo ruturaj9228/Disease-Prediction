@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { fetchSymptoms, predictDisease } from './api';
 import { Search, X, Activity, AlertTriangle, ChevronRight, Loader2 } from 'lucide-react';

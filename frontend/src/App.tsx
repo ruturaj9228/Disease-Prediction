@@ -1,4 +1,4 @@
-import React from 'react';
+
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { DiseasePredictor } from './DiseasePredictor';
 import { Stethoscope } from 'lucide-react';
